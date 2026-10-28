@@ -38,6 +38,7 @@ type Config struct {
 	Logger            Logger
 	SkipAudienceCheck bool
 	ValidatorIssuer   string
+	RequiredClientID  string
 }
 
 // TokenValidator interface for OAuth token validation
@@ -58,6 +59,7 @@ type OIDCValidator struct {
 	verifier        *oidc.IDTokenVerifier
 	provider        *oidc.Provider
 	audience        string
+	clientID        string
 	TokenValidators []func(claims jwt.MapClaims) error
 	logger          Logger
 }
@@ -226,6 +228,13 @@ func (v *OIDCValidator) Initialize(cfg *Config) error {
 		v.logger.Info("OAuth: OIDC validator initialized with audience validation: %s", cfg.Audience)
 		v.TokenValidators = append(v.TokenValidators, v.validateAudience)
 	}
+	if cfg.RequiredClientID != "" {
+		v.clientID = cfg.RequiredClientID
+		v.logger.Info("OAuth: OIDC validator initialized with client ID validation: %s", cfg.RequiredClientID)
+		v.TokenValidators = append(v.TokenValidators, v.validateClientID)
+	} else if cfg.SkipAudienceCheck {
+		v.logger.Warn("OAuth: audience validation is disabled and no required client ID is set; tokens issued to any client of %s are accepted", cfg.Issuer)
+	}
 	return nil
 }
 
@@ -320,6 +329,22 @@ func (v *OIDCValidator) validateAudience(claims jwt.MapClaims) error {
 	}
 
 	return fmt.Errorf("invalid audience claim type")
+}
+
+// validateClientID validates that the token was issued to the expected client.
+// Providers put the client in "client_id" (RFC 9068) or "azp" (OIDC).
+func (v *OIDCValidator) validateClientID(claims jwt.MapClaims) error {
+	clientID := getStringClaim(claims, "client_id")
+	if clientID == "" {
+		clientID = getStringClaim(claims, "azp")
+	}
+	if clientID == "" {
+		return fmt.Errorf("missing client_id and azp claims")
+	}
+	if clientID != v.clientID {
+		return fmt.Errorf("invalid client: expected %s, got %s", v.clientID, clientID)
+	}
+	return nil
 }
 
 // validateTokenClaims validates standard JWT claims

@@ -60,6 +60,9 @@ type OAuth2Config struct {
 	ClientSecret string
 	Scopes       []string // OIDC scopes
 
+	// RequestAudience sends Audience as the "audience" authorization parameter
+	RequestAudience bool
+
 	// Server configuration
 	MCPHost string
 	MCPPort string
@@ -224,6 +227,7 @@ func NewOAuth2ConfigFromConfig(cfg *Config, version string) *OAuth2Config {
 		ClientID:                     cfg.ClientID,
 		ClientSecret:                 cfg.ClientSecret,
 		Scopes:                       scopes,
+		RequestAudience:              cfg.RequestAudience,
 		MCPHost:                      mcpHost,
 		MCPPort:                      mcpPort,
 		MCPURL:                       mcpURL,
@@ -431,7 +435,11 @@ func (h *OAuth2Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) 
 	oauth2Cfg.RedirectURL = redirectURI
 
 	// Create authorization URL
-	authURL := oauth2Cfg.AuthCodeURL(actualState, oauth2.AccessTypeOffline)
+	authOpts := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline}
+	if h.config.RequestAudience && h.config.Audience != "" {
+		authOpts = append(authOpts, oauth2.SetAuthURLParam("audience", h.config.Audience))
+	}
+	authURL := oauth2Cfg.AuthCodeURL(actualState, authOpts...)
 
 	// Add PKCE parameters to the URL if provided
 	if codeChallenge != "" {

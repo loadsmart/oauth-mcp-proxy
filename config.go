@@ -41,6 +41,15 @@ type Config struct {
 	// The issuer URL to use for issuer validation.
 	// This should only be set if the issuer in the token differs from the standard issuer URL.
 	ValidatorIssuer string
+
+	// RequestAudience sends Audience as the "audience" authorization parameter in proxy mode.
+	// Ory Hydra based providers (e.g. JumpCloud) leave "aud" empty unless the client requests
+	// an audience the application allows.
+	RequestAudience bool
+	// RequiredClientID, if set, rejects tokens whose "client_id" or "azp" claim differs.
+	// Use it with SkipAudienceCheck when the provider issues tokens without "aud", so tokens
+	// issued to other applications of the same issuer are still rejected.
+	RequiredClientID string
 }
 
 // Validate validates the configuration
@@ -165,6 +174,7 @@ func createValidator(cfg *Config, logger Logger) (provider.TokenValidator, error
 		Logger:            logger,
 		SkipAudienceCheck: cfg.SkipAudienceCheck,
 		ValidatorIssuer:   cfg.ValidatorIssuer,
+		RequiredClientID:  cfg.RequiredClientID,
 	}
 
 	var validator provider.TokenValidator
@@ -294,6 +304,18 @@ func (b *ConfigBuilder) WithValidatorIssuer(validatorIssuer string) *ConfigBuild
 	return b
 }
 
+// WithRequestAudience sets whether Audience is sent as the "audience" authorization parameter
+func (b *ConfigBuilder) WithRequestAudience(requestAudience bool) *ConfigBuilder {
+	b.config.RequestAudience = requestAudience
+	return b
+}
+
+// WithRequiredClientID sets the client ID that tokens must carry in "client_id" or "azp"
+func (b *ConfigBuilder) WithRequiredClientID(clientID string) *ConfigBuilder {
+	b.config.RequiredClientID = clientID
+	return b
+}
+
 // WithServerURL sets the full server URL directly
 func (b *ConfigBuilder) WithServerURL(url string) *ConfigBuilder {
 	b.config.ServerURL = url
@@ -371,6 +393,8 @@ func FromEnv() (*Config, error) {
 		WithScopes(scopes).
 		WithSkipAudienceCheck(parseBoolEnv("OIDC_SKIP_AUDIENCE_CHECK", false)).
 		WithValidatorIssuer(getEnv("OIDC_VALIDATOR_ISSUER", "")).
+		WithRequestAudience(parseBoolEnv("OIDC_REQUEST_AUDIENCE", false)).
+		WithRequiredClientID(getEnv("OIDC_REQUIRED_CLIENT_ID", "")).
 		WithServerURL(serverURL).
 		WithJWTSecret([]byte(jwtSecret)).
 		Build()

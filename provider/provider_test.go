@@ -324,6 +324,81 @@ func TestOIDCValidator_AudienceValidation(t *testing.T) {
 	}
 }
 
+// TestOIDCValidator_ClientIDValidation tests binding tokens to a client when "aud" is empty
+func TestOIDCValidator_ClientIDValidation(t *testing.T) {
+	validator := &OIDCValidator{
+		clientID: "mcp-client",
+	}
+
+	tests := []struct {
+		name      string
+		claims    jwt.MapClaims
+		expectErr bool
+		errMsg    string
+	}{
+		{
+			name: "matching client_id (JumpCloud access token)",
+			claims: jwt.MapClaims{
+				"aud":       []interface{}{},
+				"client_id": "mcp-client",
+				"sub":       "user@example.com",
+			},
+			expectErr: false,
+		},
+		{
+			name: "matching azp",
+			claims: jwt.MapClaims{
+				"azp": "mcp-client",
+				"sub": "user@example.com",
+			},
+			expectErr: false,
+		},
+		{
+			name: "token issued to another client",
+			claims: jwt.MapClaims{
+				"client_id": "other-client",
+				"sub":       "user@example.com",
+			},
+			expectErr: true,
+			errMsg:    "invalid client: expected mcp-client, got other-client",
+		},
+		{
+			name: "client_id takes precedence over azp",
+			claims: jwt.MapClaims{
+				"client_id": "other-client",
+				"azp":       "mcp-client",
+				"sub":       "user@example.com",
+			},
+			expectErr: true,
+			errMsg:    "invalid client: expected mcp-client, got other-client",
+		},
+		{
+			name: "missing client claims",
+			claims: jwt.MapClaims{
+				"sub": "user@example.com",
+			},
+			expectErr: true,
+			errMsg:    "missing client_id and azp claims",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validator.validateClientID(tt.claims)
+
+			if tt.expectErr {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				} else if tt.errMsg != "" && err.Error() != tt.errMsg {
+					t.Errorf("Expected error message '%s', got '%s'", tt.errMsg, err.Error())
+				}
+			} else if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 // TestOIDCValidator_InitializationValidation tests OIDC initialization validation
 func TestOIDCValidator_InitializationValidation(t *testing.T) {
 	tests := []struct {
